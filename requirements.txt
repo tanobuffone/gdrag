@@ -1,0 +1,48 @@
+# gdrag v2 - Advanced Agent Memory & Context Optimization
+# Core dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pyyaml==6.0.1
+python-dotenv==1.0.0
+
+# Database clients
+qdrant-client==1.7.0
+psycopg2-binary==2.9.9
+neo4j==5.15.0
+
+# Embeddings (dual support)
+sentence-transformers==2.3.1  # Local embeddings
+openai==1.12.0  # OpenAI API embeddings
+tiktoken==0.6.0  # Token counting
+
+# Chunking
+nltk==3.8.1  # Sentence tokenization
+
+# Re-ranking (included in sentence-transformers)
+# CrossEncoder is part of sentence-transformers
+
+# Compression/Summarization
+transformers==4.37.2  # For local summarization models
+torch==2.2.0  # Required by transformers
+
+# Caching
+redis==5.0.1  # Optional: for embedding/result caching
+
+# Monitoring
+prometheus-client==0.19.0
+structlog==24.1.0  # Structured logging
+
+# MCP
+mcp==1.0.0
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.0
+httpx==0.26.0
+fakeredis==2.21.0  # Mock Redis for tests
+
+# Utilities
+python-multipart==0.0.6
+httpx==0.26.0
+aiofiles==23.2.1

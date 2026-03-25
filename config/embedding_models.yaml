@@ -1,0 +1,142 @@
+# gdrag v2 — Embedding Models Catalog
+# Reference for choosing the right model per use case.
+# Provider: local (sentence-transformers) | openai | both
+
+local_models:
+  # ─── Fast / Low Memory ────────────────────────────────────────────────────
+  all-MiniLM-L6-v2:
+    dimensions: 384
+    size_mb: 22
+    speed: very_fast        # ~50ms/batch on CPU
+    quality: good
+    use_case: default, high-throughput, edge
+    languages: [en]
+    notes: Default model. Best speed/quality tradeoff for English.
+
+  all-MiniLM-L12-v2:
+    dimensions: 384
+    size_mb: 33
+    speed: fast
+    quality: better
+    use_case: general-purpose
+    languages: [en]
+    notes: Slightly better than L6 at ~1.5x compute cost.
+
+  # ─── Balanced ──────────────────────────────────────────────────────────────
+  all-mpnet-base-v2:
+    dimensions: 768
+    size_mb: 420
+    speed: medium
+    quality: very_good
+    use_case: high-quality retrieval, semantic search
+    languages: [en]
+    notes: Best open-source English model for semantic similarity.
+
+  paraphrase-multilingual-MiniLM-L12-v2:
+    dimensions: 384
+    size_mb: 117
+    speed: fast
+    quality: good
+    use_case: multilingual (Spanish, English, etc.)
+    languages: [en, es, fr, de, zh, pt, it, nl, pl, ru]
+    notes: Use this for Spanish-language knowledge bases.
+
+  # ─── High Quality ─────────────────────────────────────────────────────────
+  BAAI/bge-large-en-v1.5:
+    dimensions: 1024
+    size_mb: 1340
+    speed: slow
+    quality: excellent
+    use_case: production, maximum accuracy
+    languages: [en]
+    notes: State-of-the-art open-source. Requires more VRAM.
+
+  BAAI/bge-m3:
+    dimensions: 1024
+    size_mb: 2240
+    speed: slow
+    quality: excellent
+    use_case: multilingual, production
+    languages: [100+]
+    notes: Best multilingual model. Supports dense + sparse retrieval.
+
+  # ─── Code ─────────────────────────────────────────────────────────────────
+  flax-sentence-embeddings/st-codesearch-distilroberta-base:
+    dimensions: 768
+    size_mb: 265
+    speed: medium
+    quality: very_good
+    use_case: code search, programming knowledge
+    languages: [code]
+    notes: Specifically trained on code. Use for software domain.
+
+openai_models:
+  # ─── Current generation ────────────────────────────────────────────────────
+  text-embedding-3-small:
+    dimensions: 1536            # or 256/512/1536 (configurable)
+    cost_per_1m_tokens: 0.02    # USD
+    speed: api_dependent
+    quality: very_good
+    use_case: cost-effective production, large-scale
+    notes: Best cost/quality ratio. Default for OpenAI provider.
+
+  text-embedding-3-large:
+    dimensions: 3072            # or any up to 3072
+    cost_per_1m_tokens: 0.13    # USD
+    speed: api_dependent
+    quality: excellent
+    use_case: maximum accuracy, critical retrieval
+    notes: Use when accuracy is more important than cost.
+
+  # ─── Legacy (avoid for new projects) ──────────────────────────────────────
+  text-embedding-ada-002:
+    dimensions: 1536
+    cost_per_1m_tokens: 0.10
+    quality: good
+    notes: Legacy. Use text-embedding-3-small instead.
+
+# ─── Provider Selection Guide ─────────────────────────────────────────────────
+#
+# Use local when:
+#   - Data privacy is required (no external API calls)
+#   - High throughput needed (batch processing)
+#   - Cost is a concern (no per-token pricing)
+#   - Running offline / air-gapped
+#
+# Use openai when:
+#   - Maximum quality needed with no infrastructure overhead
+#   - Small volume queries (< 1M tokens/day)
+#   - Already using OpenAI for generation
+#
+# Use both (dual) when:
+#   - Experimental comparison needed
+#   - Hybrid retrieval (local for recall, OpenAI for precision)
+#   Note: dual doubles storage requirements
+
+# ─── Recommended configurations by use case ───────────────────────────────────
+recommended:
+  development:
+    provider: local
+    model: all-MiniLM-L6-v2
+    reason: Fast, no API key needed, minimal resources
+
+  production_spanish:
+    provider: local
+    model: paraphrase-multilingual-MiniLM-L12-v2
+    reason: Best multilingual quality for Spanish+English content
+
+  production_english_quality:
+    provider: openai
+    model: text-embedding-3-small
+    reason: Best cost/quality for English-only production workloads
+
+  production_max_accuracy:
+    provider: both
+    local_model: BAAI/bge-large-en-v1.5
+    openai_model: text-embedding-3-large
+    reason: Maximum recall + precision (2x storage cost)
+
+  code_search:
+    provider: local
+    model: flax-sentence-embeddings/st-codesearch-distilroberta-base
+    reason: Code-specific training improves retrieval accuracy significantly

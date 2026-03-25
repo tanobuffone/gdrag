@@ -1,0 +1,76 @@
+# Agent Configuration for RAG API
+# Define permissions and rate limits for each agent
+
+agents:
+  cline:
+    description: "Cline - Main development agent"
+    permissions:
+      - read
+      - write
+      - ingest
+      - admin
+    rate_limit:
+      requests_per_hour: 1000
+      requests_per_minute: 100
+    allowed_domains:
+      - software
+      - finance
+      - academic
+      - print3d
+    notes: "Full access - main agent"
+
+  claude:
+    description: "Claude - Anthropic AI assistant"
+    permissions:
+      - read
+    rate_limit:
+      requests_per_hour: 500
+      requests_per_minute: 50
+    allowed_domains:
+      - software
+      - academic
+    notes: "Read-only access for general queries"
+
+  gpt:
+    description: "GPT - OpenAI assistant"
+    permissions:
+      - read
+    rate_limit:
+      requests_per_hour: 500
+      requests_per_minute: 50
+    allowed_domains:
+      - software
+      - academic
+    notes: "Read-only access for general queries"
+
+  copilot:
+    description: "GitHub Copilot"
+    permissions:
+      - read
+    rate_limit:
+      requests_per_hour: 300
+      requests_per_minute: 30
+    allowed_domains:
+      - software
+    notes: "Read-only, software domain only"
+
+  custom-agent:
+    description: "Custom agent template"
+    permissions:
+      - read
+      - write
+    rate_limit:
+      requests_per_hour: 200
+      requests_per_minute: 20
+    allowed_domains:
+      - software
+    notes: "Customizable agent with read/write access"
+
+# Default permissions for unknown agents
+default:
+  permissions: []
+  rate_limit:
+    requests_per_hour: 10
+    requests_per_minute: 1
+  allowed_domains: []
+  notes: "No access by default - must be explicitly configured"

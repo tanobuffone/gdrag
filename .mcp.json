@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gdrag": {
+      "command": "python3",
+      "args": ["-m", "src.mcp.v2.server"],
+      "cwd": "/home/gdrick/gdrag",
+      "env": {
+        "PYTHONPATH": "/home/gdrick/gdrag"
+      }
+    }
+  }
+}
