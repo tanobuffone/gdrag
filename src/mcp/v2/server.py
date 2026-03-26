@@ -422,3 +422,8 @@ def create_mcp_server() -> FastMCP:
             return {"error": str(e)}
 
     return mcp
+
+
+if __name__ == "__main__":
+    server = create_mcp_server()
+    server.run()
