@@ -14,6 +14,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    PointIdsList,
     PointStruct,
     VectorParams,
 )
@@ -196,27 +197,27 @@ class EnhancedVectorStore:
 
         query_filter = Filter(must=filters) if filters else None
 
-        # Search
-        results = client.search(
+        # Search using query_points (search() was deprecated in qdrant-client 1.7.0)
+        query_result = client.query_points(
             collection_name=self._collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=limit,
             query_filter=query_filter,
         )
 
         # Convert to RankedResult
         ranked_results = []
-        for result in results:
-            payload = result.payload
+        for point in query_result.points:
+            payload = point.payload
             ranked = RankedResult(
                 content=payload.get("content", ""),
                 title=payload.get("title", payload.get("doc_id", "")),
                 domain=payload.get("domain"),
                 source=payload.get("source", payload.get("doc_id", "")),
-                semantic_score=result.score,
+                semantic_score=point.score,
                 rerank_score=0.0,
                 attention_score=0.0,
-                final_score=result.score,
+                final_score=point.score,
                 chunk_index=payload.get("chunk_index", 0),
                 doc_id=payload.get("doc_id", ""),
                 metadata=payload,
@@ -307,11 +308,11 @@ class EnhancedVectorStore:
         if not results[0]:
             return 0
 
-        # Delete points
+        # Delete points using PointIdsList (required for qdrant-client 1.7.0)
         point_ids = [point.id for point in results[0]]
         client.delete(
             collection_name=self._collection_name,
-            points_selector=point_ids,
+            points_selector=PointIdsList(points=point_ids),
         )
 
         logger.info(f"Deleted {len(point_ids)} chunks for document {doc_id}")
