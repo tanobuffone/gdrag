@@ -20,7 +20,7 @@ services:
   # PostgreSQL — sessions, knowledge, agents
   # ─────────────────────────────────────────────
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: gdrag-postgres
     restart: unless-stopped
     environment:
@@ -45,7 +45,7 @@ services:
   # Qdrant — vector embeddings
   # ─────────────────────────────────────────────
   qdrant:
-    image: qdrant/qdrant:v1.7.0
+    image: qdrant/qdrant:latest
     container_name: gdrag-qdrant
     restart: unless-stopped
     ports:
@@ -68,7 +68,7 @@ services:
   # Memgraph — knowledge graph (optional)
   # ─────────────────────────────────────────────
   memgraph:
-    image: memgraph/memgraph:2.11.0
+    image: memgraph/memgraph:latest
     container_name: gdrag-memgraph
     restart: unless-stopped
     profiles: ["graph", "full"]
