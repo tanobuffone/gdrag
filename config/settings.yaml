@@ -57,10 +57,10 @@ attention:
 database:
   # PostgreSQL
   postgres_host: localhost
-  postgres_port: 5432
+  postgres_port: 5434
   postgres_db: gdrag
   postgres_user: gdrag
-  postgres_password: ""  # Set via POSTGRES_PASSWORD env var
+  postgres_password: "gdrag2024"
 
   # Qdrant
   qdrant_host: localhost
