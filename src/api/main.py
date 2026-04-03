@@ -23,10 +23,14 @@ from neo4j import GraphDatabase
 from .v2.router import api_v2_router
 from .v2.middleware import RequestLoggingMiddleware, SessionMiddleware
 
+# Import v3 components
+from .v3.tasks import tasks_router
+from .v3.knowledge import knowledge_router
+
 app = FastAPI(
     title="RAG API",
-    description="Sistema de Retrieval-Augmented Generation para agentes IA - Version 2.0",
-    version="2.0.0",
+    description="Sistema de Retrieval-Augmented Generation para agentes IA - Version 3.0",
+    version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -46,6 +50,10 @@ app.add_middleware(SessionMiddleware)
 
 # Include v2 router
 app.include_router(api_v2_router)
+
+# Include v3 routers
+app.include_router(tasks_router)
+app.include_router(knowledge_router)
 
 # Security
 security = HTTPBearer()
