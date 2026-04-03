@@ -26,6 +26,7 @@ from .v2.middleware import RequestLoggingMiddleware, SessionMiddleware
 # Import v3 components
 from .v3.tasks import tasks_router
 from .v3.knowledge import knowledge_router
+from .v3.agents import agents_router
 
 # Import core modules
 from ..core.embeddings import embed_query
@@ -59,6 +60,7 @@ app.include_router(api_v2_router)
 # Include v3 routers
 app.include_router(tasks_router)
 app.include_router(knowledge_router)
+app.include_router(agents_router)
 
 # Security
 security = HTTPBearer()

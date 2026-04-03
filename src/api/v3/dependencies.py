@@ -244,3 +244,25 @@ def get_knowledge_manager(request: Request) -> KnowledgeManager:
     if manager is not None:
         return manager
     return _get_or_create_knowledge_manager()
+
+
+# ============================================================================
+# AgentRegistry dependency
+# ============================================================================
+
+_agent_registry_singleton: Optional["AgentRegistry"] = None
+
+
+def get_agent_registry(request: Request) -> "AgentRegistry":
+    """Return the shared AgentRegistry singleton.
+
+    Creates the instance on first call using the app's AppConfig.
+    """
+    global _agent_registry_singleton
+    if _agent_registry_singleton is None:
+        from ..core.agent_registry import AgentRegistry as _AR
+        from ..core.config import AppConfig
+
+        config = AppConfig()
+        _agent_registry_singleton = _AR(config)
+    return _agent_registry_singleton
