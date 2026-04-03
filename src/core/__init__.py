@@ -26,6 +26,8 @@ from .tenant_manager import (
 
 from .task_queue import TaskQueue
 
+from .state_manager import StateManager
+
 from .event_bus import (
     EventBus,
     EventHandler,
@@ -55,4 +57,6 @@ __all__ = [
     "EventBus",
     "EventHandler",
     "DEFAULT_STREAMS",
+    # StateManager
+    "StateManager",
 ]
