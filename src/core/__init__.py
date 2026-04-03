@@ -17,6 +17,13 @@ from .knowledge_manager import (
     DocumentChunkerProtocol,
 )
 
+from .tenant_manager import (
+    TenantManager,
+    TenantAccessDeniedError,
+    QuotaExceededError,
+    TenantNotFoundError,
+)
+
 from .task_queue import TaskQueue
 
 from .event_bus import (
@@ -39,6 +46,11 @@ __all__ = [
     "RelationalStoreProtocol",
     "TenantManagerProtocol",
     "DocumentChunkerProtocol",
+    # TenantManager
+    "TenantManager",
+    "TenantAccessDeniedError",
+    "QuotaExceededError",
+    "TenantNotFoundError",
     # EventBus
     "EventBus",
     "EventHandler",
