@@ -17,6 +17,8 @@ from .knowledge_manager import (
     DocumentChunkerProtocol,
 )
 
+from .task_queue import TaskQueue
+
 __all__ = [
     "EmbeddingConfig",
     "ChunkConfig",
@@ -24,6 +26,7 @@ __all__ = [
     "CompressionConfig",
     "AttentionConfig",
     "AppConfig",
+    "TaskQueue",
     "KnowledgeManager",
     "VectorStoreProtocol",
     "GraphStoreProtocol",
