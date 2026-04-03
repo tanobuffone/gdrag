@@ -1,40 +1,29 @@
 """gdrag v2 - Data models module."""
 
-from .tasks import (
-    # Task models
-    Task,
-    TaskStatus,
-)
-
 from .schemas import (
-    # Embedding models
     EmbeddingResult,
-    # Chunk models
     Chunk,
-    # Query models
     EnhancedQueryRequest,
     EnhancedQueryResponse,
     RankedResult,
     ResponseMetadata,
-    # Session models
     SessionMemory,
     QueryRecord,
-    # Knowledge models
     KnowledgeItem,
     ConceptRelation,
-    # Stats models
     CollectionStats,
     DomainStats,
 )
 
-from .agent import (
-    # Agent registry models
-    HealthStatus,
-    AgentEndpoint,
-    AgentRegistration,
-    AgentInfo,
-    AgentHeartbeat,
-    AgentRegistryStats,
+from .tenant import (
+    TenantStatus,
+    Tenant,
+    TenantPermissions,
+    TenantQuotas,
+    QuotaUsage,
+    TenantCreateRequest,
+    TenantUpdateRequest,
+    TenantResponse,
 )
 
 __all__ = [
@@ -50,14 +39,12 @@ __all__ = [
     "ConceptRelation",
     "CollectionStats",
     "DomainStats",
-    # Task models
-    "Task",
-    "TaskStatus",
-    # Agent registry models
-    "HealthStatus",
-    "AgentEndpoint",
-    "AgentRegistration",
-    "AgentInfo",
-    "AgentHeartbeat",
-    "AgentRegistryStats",
+    "TenantStatus",
+    "Tenant",
+    "TenantPermissions",
+    "TenantQuotas",
+    "QuotaUsage",
+    "TenantCreateRequest",
+    "TenantUpdateRequest",
+    "TenantResponse",
 ]
