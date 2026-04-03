@@ -1,11 +1,5 @@
 """gdrag v2 - Data models module."""
 
-from .tasks import (
-    # Task models
-    Task,
-    TaskStatus,
-)
-
 from .schemas import (
     # Embedding models
     EmbeddingResult,
@@ -27,6 +21,16 @@ from .schemas import (
     DomainStats,
 )
 
+from .agent import (
+    # Agent registry models
+    HealthStatus,
+    AgentEndpoint,
+    AgentRegistration,
+    AgentInfo,
+    AgentHeartbeat,
+    AgentRegistryStats,
+)
+
 __all__ = [
     "EmbeddingResult",
     "Chunk",
@@ -40,7 +44,10 @@ __all__ = [
     "ConceptRelation",
     "CollectionStats",
     "DomainStats",
-    # Task models
-    "Task",
-    "TaskStatus",
+    "HealthStatus",
+    "AgentEndpoint",
+    "AgentRegistration",
+    "AgentInfo",
+    "AgentHeartbeat",
+    "AgentRegistryStats",
 ]
