@@ -27,6 +27,11 @@ from .v2.middleware import RequestLoggingMiddleware, SessionMiddleware
 from .v3.tasks import tasks_router
 from .v3.knowledge import knowledge_router
 
+# Import core modules
+from ..core.embeddings import embed_query
+from ..core.graph_store import EnhancedGraphStore
+from ..core.config import AppConfig
+
 app = FastAPI(
     title="RAG API",
     description="Sistema de Retrieval-Augmented Generation para agentes IA - Version 3.0",
@@ -467,17 +472,37 @@ async def save_knowledge(
     
     return doc_id
 
+# ─── CORE SINGLETONS ────────────────────────────────────────────────────────
+
+_app_config: Optional[AppConfig] = None
+_graph_store: Optional[EnhancedGraphStore] = None
+
+
+def get_app_config() -> AppConfig:
+    """Get or create AppConfig singleton."""
+    global _app_config
+    if _app_config is None:
+        _app_config = AppConfig()
+    return _app_config
+
+
+def get_graph_store() -> EnhancedGraphStore:
+    """Get or create EnhancedGraphStore singleton."""
+    global _graph_store
+    if _graph_store is None:
+        _graph_store = EnhancedGraphStore(get_app_config())
+    return _graph_store
+
+
 def generate_embedding(text: str) -> list:
-    """Generate embedding for text (placeholder)"""
-    # In production, use sentence-transformers or OpenAI embeddings
-    import random
-    return [random.random() for _ in range(1536)]
+    """Generate embedding for text using core embeddings module."""
+    return embed_query(text)
+
 
 def extract_concepts(query: str) -> list:
-    """Extract concepts from query (placeholder)"""
-    # In production, use NLP to extract concepts
-    words = query.lower().split()
-    return [w for w in words if len(w) > 3][:5]
+    """Extract concepts from query using core graph_store module."""
+    store = get_graph_store()
+    return store.extract_concepts(query)
 
 def deduplicate_results(results: list) -> list:
     """Deduplicate results by content similarity"""
