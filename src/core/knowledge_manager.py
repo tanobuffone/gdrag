@@ -2,13 +2,16 @@
 
 Provides multi-agent knowledge management with visibility controls,
 ownership tracking, and cross-store coordination.
+Publishes knowledge.shared events when documents are promoted to shared.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Protocol, Set
 from uuid import uuid4
 
+from ..models.events import Event, EventType, StreamName
 from ..models.schemas import (
     Chunk,
     ConceptRelation,
@@ -145,6 +148,7 @@ class KnowledgeManager:
         relational_store: Store for metadata, sessions, and access control.
         tenant_manager: Optional manager for team membership queries.
         chunker: Document chunker for splitting content.
+        event_bus: Optional EventBus for publishing events.
     """
 
     def __init__(
@@ -154,15 +158,43 @@ class KnowledgeManager:
         relational_store: RelationalStoreProtocol,
         tenant_manager: Optional[TenantManagerProtocol] = None,
         chunker: Optional[DocumentChunkerProtocol] = None,
+        event_bus: Optional[Any] = None,
     ):
         self.vector_store = vector_store
         self.graph_store = graph_store
         self.relational_store = relational_store
         self.tenant_manager = tenant_manager
         self.chunker = chunker
+        self.event_bus = event_bus
 
         # Ensure the knowledge_access table exists
         self._ensure_access_schema()
+
+    # ------------------------------------------------------------------
+    # Event publishing helper
+    # ------------------------------------------------------------------
+
+    def _publish_event(self, stream: str, event: Event) -> None:
+        """Publish an event to the EventBus if available.
+
+        Uses a fire-and-forget pattern: if the event bus is unavailable
+        or publishing fails, the error is logged but not raised.
+        """
+        if self.event_bus is None:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self.event_bus.publish_safe(stream, event))
+            else:
+                loop.run_until_complete(self.event_bus.publish(stream, event))
+        except RuntimeError:
+            try:
+                asyncio.run(self.event_bus.publish(stream, event))
+            except Exception as exc:
+                logger.debug("Could not publish event: %s", exc)
+        except Exception as exc:
+            logger.debug("Could not publish event: %s", exc)
 
     # ------------------------------------------------------------------
     # Schema helpers
@@ -456,6 +488,23 @@ class KnowledgeManager:
             )
         access.updated_at = datetime.utcnow()
         self._store_access(access)
+
+        # Publish knowledge.shared event
+        self._publish_event(
+            StreamName.KNOWLEDGE.value,
+            Event(
+                event_type=EventType.KNOWLEDGE_SHARED.value,
+                source="knowledge_manager",
+                payload={
+                    "doc_id": doc_id,
+                    "owner_agent_id": agent_id,
+                    "allowed_agent_ids": access.allowed_agent_ids,
+                    "allowed_domains": access.allowed_domains,
+                    "visibility": access.visibility.value,
+                },
+            ),
+        )
+
         logger.info(
             f"Promoted doc {doc_id} to shared "
             f"(agents={access.allowed_agent_ids}, domains={access.allowed_domains})"

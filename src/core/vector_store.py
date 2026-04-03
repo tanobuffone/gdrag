@@ -2,6 +2,7 @@
 
 Provides chunked storage, attention-focused search, re-ranking integration,
 and multi-tenancy support with namespace isolation and visibility controls.
+Publishes knowledge.updated events when chunks are upserted.
 
 v3 Changes:
   - Per-tenant namespace support (tenant_{agent_id}_knowledge)
@@ -10,6 +11,7 @@ v3 Changes:
   - Backward-compatible with v2 (agent_id is optional, defaults to legacy behavior)
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from enum import Enum
@@ -29,6 +31,7 @@ from qdrant_client.models import (
 
 from ..core.config import AppConfig, RerankConfig
 from ..core.embeddings import embed_query, embed_texts
+from ..models.events import Event, EventType, StreamName
 from ..models.schemas import Chunk, CollectionStats, RankedResult
 
 logger = logging.getLogger(__name__)
@@ -70,6 +73,7 @@ class EnhancedVectorStore:
         self,
         config: AppConfig,
         use_namespaces: bool = False,
+        event_bus: Optional[Any] = None,
     ):
         """Initialize the vector store.
 
@@ -78,8 +82,10 @@ class EnhancedVectorStore:
             use_namespaces: If True, each tenant gets its own Qdrant collection
                 named ``tenant_{agent_id}_knowledge``.  If False (default), a
                 single shared collection is used with payload-based filtering.
+            event_bus: Optional EventBus for publishing events.
         """
         self.config = config
+        self.event_bus = event_bus
         self._client: Optional[QdrantClient] = None
         self._base_collection = config.database.qdrant_collection
         self.use_namespaces = use_namespaces
@@ -102,6 +108,32 @@ class EnhancedVectorStore:
                 f"{self.config.database.qdrant_host}:{self.config.database.qdrant_port}"
             )
         return self._client
+
+    # ------------------------------------------------------------------
+    # Event publishing helper
+    # ------------------------------------------------------------------
+
+    def _publish_event(self, stream: str, event: Event) -> None:
+        """Publish an event to the EventBus if available.
+
+        Uses a fire-and-forget pattern: if the event bus is unavailable
+        or publishing fails, the error is logged but not raised.
+        """
+        if self.event_bus is None:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self.event_bus.publish_safe(stream, event))
+            else:
+                loop.run_until_complete(self.event_bus.publish(stream, event))
+        except RuntimeError:
+            try:
+                asyncio.run(self.event_bus.publish(stream, event))
+            except Exception as exc:
+                logger.debug("Could not publish event: %s", exc)
+        except Exception as exc:
+            logger.debug("Could not publish event: %s", exc)
 
     # ------------------------------------------------------------------
     # Namespace helpers
@@ -296,6 +328,7 @@ class EnhancedVectorStore:
         # Prepare points
         points = []
         stored_ids = []
+        doc_ids = set()
 
         for chunk in chunks:
             embedding = embeddings.get(chunk.chunk_id)
@@ -328,6 +361,7 @@ class EnhancedVectorStore:
             )
             points.append(point)
             stored_ids.append(chunk.chunk_id)
+            doc_ids.add(chunk.doc_id)
 
         # Upsert in batches
         batch_size = 100
@@ -336,6 +370,24 @@ class EnhancedVectorStore:
             client.upsert(
                 collection_name=collection_name,
                 points=batch,
+            )
+
+        # Publish knowledge.updated event
+        if stored_ids:
+            first_chunk = chunks[0] if chunks else None
+            self._publish_event(
+                StreamName.KNOWLEDGE.value,
+                Event(
+                    event_type=EventType.KNOWLEDGE_UPDATED.value,
+                    source="vector_store",
+                    payload={
+                        "doc_ids": list(doc_ids),
+                        "chunks_stored": len(stored_ids),
+                        "agent_id": agent_id,
+                        "visibility": visibility,
+                        "domain": first_chunk.metadata.get("domain") if first_chunk else None,
+                    },
+                ),
             )
 
         logger.info(

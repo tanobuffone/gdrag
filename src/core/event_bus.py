@@ -34,6 +34,9 @@ class EventBus:
     Provides reliable pub/sub messaging with consumer group support,
     message acknowledgment, pending message inspection, and message claiming.
 
+    Supports graceful degradation when Redis is unavailable: publish calls
+    become no-ops and a warning is logged.
+
     Usage:
         bus = EventBus("redis://localhost:6379/0")
         await bus.connect()
@@ -69,16 +72,30 @@ class EventBus:
         """Establish connection to Redis.
 
         Creates an async Redis client using redis[hiredis] for optimal performance.
+        If Redis is unavailable, the EventBus enters degraded mode (publish is no-op).
         """
         if self._redis is not None:
             return
-        self._redis = redis.from_url(
-            self._redis_url,
-            decode_responses=False,  # Keep bytes for binary safety
-        )
-        # Verify connection
-        await self._redis.ping()
-        logger.info("EventBus connected to Redis at %s", self._redis_url)
+        try:
+            self._redis = redis.from_url(
+                self._redis_url,
+                decode_responses=False,  # Keep bytes for binary safety
+            )
+            # Verify connection
+            await self._redis.ping()
+            logger.info("EventBus connected to Redis at %s", self._redis_url)
+        except Exception as exc:
+            logger.warning(
+                "EventBus could not connect to Redis at %s: %s — "
+                "operating in degraded mode (events will be dropped)",
+                self._redis_url, exc,
+            )
+            self._redis = None
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the EventBus has an active Redis connection."""
+        return self._redis is not None
 
     async def close(self) -> None:
         """Close Redis connection and stop all subscription loops."""
@@ -112,26 +129,62 @@ class EventBus:
     # Publish
     # ────────────────────────────────────────────────────────────────────────
 
-    async def publish(self, stream: str, event: Event) -> str:
+    async def publish(self, stream: str, event: Event) -> Optional[str]:
         """Publish an event to a Redis Stream.
+
+        If the EventBus is not connected (degraded mode), the event is silently
+        dropped and None is returned.
 
         Args:
             stream: Stream name (e.g., "gdrag:knowledge").
             event: Event to publish.
 
         Returns:
-            Message ID assigned by Redis (e.g., "1700000000000-0").
+            Message ID assigned by Redis (e.g., "1700000000000-0"), or None if
+            Redis is unavailable.
         """
-        data = event.to_stream_dict()
-        msg_id = await self.redis.xadd(
-            stream,
-            data,
-            maxlen=10000,
-            approximate=True,
-        )
-        decoded_id = msg_id.decode("utf-8") if isinstance(msg_id, bytes) else msg_id
-        logger.debug("Published event %s to %s (id=%s)", event.event_type, stream, decoded_id)
-        return decoded_id
+        if self._redis is None:
+            logger.debug(
+                "EventBus not connected — dropping event %s for stream %s",
+                event.event_type, stream,
+            )
+            return None
+
+        try:
+            data = event.to_stream_dict()
+            msg_id = await self._redis.xadd(
+                stream,
+                data,
+                maxlen=10000,
+                approximate=True,
+            )
+            decoded_id = msg_id.decode("utf-8") if isinstance(msg_id, bytes) else msg_id
+            logger.debug("Published event %s to %s (id=%s)", event.event_type, stream, decoded_id)
+            return decoded_id
+        except Exception as exc:
+            logger.warning(
+                "Failed to publish event %s to %s: %s",
+                event.event_type, stream, exc,
+            )
+            return None
+
+    async def publish_safe(self, stream: str, event: Event) -> Optional[str]:
+        """Publish an event with full error suppression.
+
+        Same as publish() but never raises. Suitable for fire-and-forget
+        scenarios where event publishing should not break the caller.
+
+        Args:
+            stream: Stream name.
+            event: Event to publish.
+
+        Returns:
+            Message ID or None on failure.
+        """
+        try:
+            return await self.publish(stream, event)
+        except Exception:
+            return None
 
     # ────────────────────────────────────────────────────────────────────────
     # Consumer Groups
@@ -154,8 +207,12 @@ class EventBus:
         Returns:
             True if group was created, False if it already existed.
         """
+        if self._redis is None:
+            logger.debug("EventBus not connected — skipping consumer group creation")
+            return False
+
         try:
-            await self.redis.xgroup_create(
+            await self._redis.xgroup_create(
                 name=stream,
                 groupname=group,
                 id=start_id,
@@ -196,6 +253,10 @@ class EventBus:
             count: Max messages to fetch per read.
             block_ms: Block timeout in milliseconds for XREADGROUP.
         """
+        if self._redis is None:
+            logger.warning("EventBus not connected — cannot subscribe to %s", stream)
+            return
+
         self._running = True
         logger.info(
             "Subscribing consumer '%s' to stream '%s' (group='%s')",
@@ -204,7 +265,7 @@ class EventBus:
 
         while self._running:
             try:
-                messages = await self.redis.xreadgroup(
+                messages = await self._redis.xreadgroup(
                     groupname=consumer_group,
                     consumername=consumer_name,
                     streams={stream: ">"},
@@ -245,7 +306,7 @@ class EventBus:
         handler: EventHandler,
         count: int = 10,
         block_ms: int = 5000,
-    ) -> asyncio.Task:
+    ) -> Optional[asyncio.Task]:
         """Start a subscription in a background task.
 
         Args:
@@ -257,8 +318,12 @@ class EventBus:
             block_ms: Block timeout in milliseconds.
 
         Returns:
-            The asyncio.Task running the subscription loop.
+            The asyncio.Task running the subscription loop, or None if not connected.
         """
+        if self._redis is None:
+            logger.debug("EventBus not connected — cannot start background subscription")
+            return None
+
         task = asyncio.create_task(
             self.subscribe(stream, consumer_group, consumer_name, handler, count, block_ms)
         )

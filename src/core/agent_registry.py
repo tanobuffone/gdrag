@@ -2,12 +2,14 @@
 
 Provides agent registration, heartbeat monitoring, health tracking,
 and lifecycle management backed by PostgreSQL.
+Publishes agent.registered, agent.heartbeat, and agent.offline events.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -20,6 +22,7 @@ from ..models.agent import (
     AgentRegistryStats,
     HealthStatus,
 )
+from ..models.events import Event, EventType, StreamName
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +36,39 @@ class AgentRegistry:
 
     Args:
         config: Application configuration with database settings.
+        event_bus: Optional EventBus for publishing agent events.
     """
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, event_bus: Optional[Any] = None) -> None:
         self.config = config
+        self.event_bus = event_bus
         self._connection = None
+
+    # ------------------------------------------------------------------
+    # Event publishing helper
+    # ------------------------------------------------------------------
+
+    def _publish_event(self, stream: str, event: Event) -> None:
+        """Publish an event to the EventBus if available.
+
+        Uses a fire-and-forget pattern: if the event bus is unavailable
+        or publishing fails, the error is logged but not raised.
+        """
+        if self.event_bus is None:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self.event_bus.publish_safe(stream, event))
+            else:
+                loop.run_until_complete(self.event_bus.publish(stream, event))
+        except RuntimeError:
+            try:
+                asyncio.run(self.event_bus.publish(stream, event))
+            except Exception as exc:
+                logger.debug("Could not publish event: %s", exc)
+        except Exception as exc:
+            logger.debug("Could not publish event: %s", exc)
 
     # ------------------------------------------------------------------
     # Connection helpers
@@ -173,6 +204,22 @@ class AgentRegistry:
         )
         result = self._execute_query(query, params)
         agent_id = result[0]["agent_id"] if result else agent.agent_id
+
+        # Publish agent.registered event
+        self._publish_event(
+            StreamName.AGENTS.value,
+            Event(
+                event_type=EventType.AGENT_REGISTERED.value,
+                source="agent_registry",
+                payload={
+                    "agent_id": agent_id,
+                    "name": agent.name,
+                    "capabilities": agent.capabilities,
+                    "heartbeat_interval_s": agent.heartbeat_interval_s,
+                },
+            ),
+        )
+
         logger.info("Agent registered: %s", agent_id)
         return agent_id
 
@@ -193,6 +240,18 @@ class AgentRegistry:
         result = self._execute_query(query, (agent_id,))
         deleted = len(result) > 0
         if deleted:
+            # Publish agent.offline event
+            self._publish_event(
+                StreamName.AGENTS.value,
+                Event(
+                    event_type=EventType.AGENT_OFFLINE.value,
+                    source="agent_registry",
+                    payload={
+                        "agent_id": agent_id,
+                        "reason": "unregistered",
+                    },
+                ),
+            )
             logger.info("Agent unregistered: %s", agent_id)
         else:
             logger.warning("Unregister called for unknown agent: %s", agent_id)
@@ -230,6 +289,19 @@ class AgentRegistry:
         result = self._execute_query(query, params)
         recorded = len(result) > 0
         if recorded:
+            # Publish agent.heartbeat event
+            self._publish_event(
+                StreamName.AGENTS.value,
+                Event(
+                    event_type=EventType.AGENT_HEARTBEAT.value,
+                    source="agent_registry",
+                    payload={
+                        "agent_id": agent_id,
+                        "status": status.value,
+                        "metrics": metrics or {},
+                    },
+                ),
+            )
             logger.debug("Heartbeat recorded for agent %s", agent_id)
         return recorded
 
@@ -384,6 +456,30 @@ class AgentRegistry:
         rows = self._execute_query(query, (timeout_seconds / 60.0,))
         updated = rows[0]["updated"] if rows else 0
         if updated:
+            # Get the list of stale agents and publish agent.offline events
+            stale_query = """
+            SELECT agent_id FROM agents
+            WHERE status = 'unhealthy'
+              AND updated_at < NOW() - INTERVAL '%s seconds'
+            """
+            try:
+                stale_rows = self._execute_query(stale_query, (timeout_seconds,))
+                for row in stale_rows:
+                    self._publish_event(
+                        StreamName.AGENTS.value,
+                        Event(
+                            event_type=EventType.AGENT_OFFLINE.value,
+                            source="agent_registry",
+                            payload={
+                                "agent_id": row["agent_id"],
+                                "reason": "stale_heartbeat",
+                                "timeout_seconds": timeout_seconds,
+                            },
+                        ),
+                    )
+            except Exception as exc:
+                logger.debug("Could not publish offline events: %s", exc)
+
             logger.info("Marked %d stale agents as unhealthy", updated)
         return updated
 

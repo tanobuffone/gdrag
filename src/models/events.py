@@ -34,12 +34,14 @@ class EventType(str, Enum):
     KNOWLEDGE_INGESTED = "knowledge.ingested"
     KNOWLEDGE_UPDATED = "knowledge.updated"
     KNOWLEDGE_DELETED = "knowledge.deleted"
+    KNOWLEDGE_SHARED = "knowledge.shared"
 
     # Session events
     SESSION_CREATED = "session.created"
     SESSION_UPDATED = "session.updated"
     SESSION_EXPIRED = "session.expired"
     SESSION_QUERY = "session.query"
+    SESSION_COMPRESSED = "session.compressed"
 
     # Task events
     TASK_CREATED = "task.created"
@@ -51,6 +53,7 @@ class EventType(str, Enum):
     AGENT_REGISTERED = "agent.registered"
     AGENT_HEARTBEAT = "agent.heartbeat"
     AGENT_ERROR = "agent.error"
+    AGENT_OFFLINE = "agent.offline"
 
     # Context events
     CONTEXT_UPDATED = "context.updated"

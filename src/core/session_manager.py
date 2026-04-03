@@ -3,18 +3,22 @@
 Provides session creation, persistence, context retrieval, and compression
 with multi-tenancy support via agent_id ownership verification.
 
+Publishes events to EventBus when sessions are created or compressed.
+
 Compatibility:
     - API v2: agent_id is optional, no ownership verification
     - API v3: agent_id required, ownership verified on all operations
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from ..core.config import AppConfig, SessionConfig
 from ..core.relational_store import EnhancedRelationalStore
+from ..models.events import Event, EventType, StreamName
 from ..models.schemas import QueryRecord, SessionMemory
 
 logger = logging.getLogger(__name__)
@@ -39,15 +43,39 @@ class SessionManager:
         self,
         config: AppConfig,
         relational_store: Optional[EnhancedRelationalStore] = None,
+        event_bus: Optional[Any] = None,
     ):
         self.config = config
         self.session_config = config.session
         self.relational_store = relational_store
+        self.event_bus = event_bus
         self._active_sessions: Dict[str, SessionMemory] = {}
 
     def _get_store(self) -> Optional[EnhancedRelationalStore]:
         """Get relational store if available."""
         return self.relational_store
+
+    def _publish_event(self, stream: str, event: Event) -> None:
+        """Publish an event to the EventBus if available.
+
+        Uses a fire-and-forget pattern: if the event bus is unavailable
+        or publishing fails, the error is logged but not raised.
+        """
+        if self.event_bus is None:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self.event_bus.publish_safe(stream, event))
+            else:
+                loop.run_until_complete(self.event_bus.publish(stream, event))
+        except RuntimeError:
+            try:
+                asyncio.run(self.event_bus.publish(stream, event))
+            except Exception as exc:
+                logger.debug("Could not publish event: %s", exc)
+        except Exception as exc:
+            logger.debug("Could not publish event: %s", exc)
 
     def create_session(
         self,
@@ -87,6 +115,20 @@ class SessionManager:
                 store.store_session_memory(session)
             except Exception as e:
                 logger.warning(f"Failed to persist session: {e}")
+
+        # Publish session.created event
+        self._publish_event(
+            StreamName.SESSIONS.value,
+            Event(
+                event_type=EventType.SESSION_CREATED.value,
+                source="session_manager",
+                payload={
+                    "session_id": session.session_id,
+                    "agent_id": agent_id,
+                    "max_tokens": self.session_config.max_tokens,
+                },
+            ),
+        )
 
         logger.info(f"Created session {session.session_id} for agent {agent_id}")
         return session
@@ -288,6 +330,22 @@ class SessionManager:
                 store.store_session_memory(session)
             except Exception as e:
                 logger.warning(f"Failed to persist compressed session: {e}")
+
+        # Publish session.compressed event
+        self._publish_event(
+            StreamName.SESSIONS.value,
+            Event(
+                event_type=EventType.SESSION_COMPRESSED.value,
+                source="session_manager",
+                payload={
+                    "session_id": session_id,
+                    "agent_id": session.agent_id,
+                    "summary": summary,
+                    "queries_retained": len(session.query_history),
+                    "queries_compressed": len(old_queries),
+                },
+            ),
+        )
 
         logger.info(f"Compressed session {session_id}")
         return True
