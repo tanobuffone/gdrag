@@ -222,3 +222,74 @@ class DomainStats(BaseModel):
     chunk_count: int
     avg_chunk_size: float
     concepts_count: int
+
+
+# ============================================================================
+# Knowledge Manager Models (v3)
+# ============================================================================
+
+class VisibilityLevel(str, Enum):
+    """Visibility levels for knowledge documents."""
+    PRIVATE = "private"    # Only accessible by owner agent
+    TEAM = "team"          # Accessible by agents in the same team
+    SHARED = "shared"      # Accessible by specified agents/domains
+    PUBLIC = "public"      # Accessible by all agents
+
+
+class KnowledgeAccess(BaseModel):
+    """Tracks ownership and access control for knowledge documents."""
+    doc_id: str = Field(description="Document ID")
+    owner_agent_id: str = Field(description="Agent that owns this document")
+    visibility: VisibilityLevel = Field(
+        default=VisibilityLevel.PRIVATE,
+        description="Visibility level"
+    )
+    allowed_agent_ids: List[str] = Field(
+        default_factory=list,
+        description="Agents explicitly granted access"
+    )
+    allowed_domains: List[str] = Field(
+        default_factory=list,
+        description="Domains this document is shared with"
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GraphNode(BaseModel):
+    """A node in the knowledge graph."""
+    id: str = Field(description="Node identifier")
+    label: str = Field(description="Node label (concept name)")
+    node_type: str = Field(default="concept", description="Type of node")
+    properties: Dict[str, Any] = Field(default_factory=dict)
+
+
+class GraphEdge(BaseModel):
+    """An edge in the knowledge graph."""
+    source_id: str = Field(description="Source node ID")
+    target_id: str = Field(description="Target node ID")
+    relation_type: str = Field(description="Type of relationship")
+    weight: float = Field(default=1.0, description="Edge weight")
+    properties: Dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeGraph(BaseModel):
+    """Knowledge graph representation."""
+    nodes: List[GraphNode] = Field(default_factory=list)
+    edges: List[GraphEdge] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SearchResult(BaseModel):
+    """Search result from KnowledgeManager with ownership info."""
+    doc_id: str = Field(description="Document ID")
+    content: str = Field(description="Result content")
+    title: str = Field(description="Document title")
+    domain: Optional[str] = Field(default=None)
+    source: str = Field(description="Source identifier")
+    score: float = Field(description="Combined relevance score")
+    visibility: VisibilityLevel = Field(description="Document visibility level")
+    owner_agent_id: str = Field(description="Owning agent ID")
+    is_shared: bool = Field(default=False, description="Whether this is shared knowledge")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = Field(default=None)

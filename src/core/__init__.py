@@ -1,4 +1,4 @@
-"""gdrag v2 - Core module for advanced agent memory and context optimization."""
+"""gdrag v2/v3 - Core module for advanced agent memory and context optimization."""
 
 from .config import (
     EmbeddingConfig,
@@ -8,8 +8,14 @@ from .config import (
     AttentionConfig,
     AppConfig,
 )
-
-from .task_queue import TaskQueue
+from .knowledge_manager import (
+    KnowledgeManager,
+    VectorStoreProtocol,
+    GraphStoreProtocol,
+    RelationalStoreProtocol,
+    TenantManagerProtocol,
+    DocumentChunkerProtocol,
+)
 
 __all__ = [
     "EmbeddingConfig",
@@ -18,5 +24,10 @@ __all__ = [
     "CompressionConfig",
     "AttentionConfig",
     "AppConfig",
-    "TaskQueue",
+    "KnowledgeManager",
+    "VectorStoreProtocol",
+    "GraphStoreProtocol",
+    "RelationalStoreProtocol",
+    "TenantManagerProtocol",
+    "DocumentChunkerProtocol",
 ]
