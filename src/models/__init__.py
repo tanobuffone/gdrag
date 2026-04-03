@@ -1,5 +1,11 @@
 """gdrag v2 - Data models module."""
 
+from .tasks import (
+    # Task models
+    Task,
+    TaskStatus,
+)
+
 from .schemas import (
     # Embedding models
     EmbeddingResult,
@@ -34,4 +40,7 @@ __all__ = [
     "ConceptRelation",
     "CollectionStats",
     "DomainStats",
+    # Task models
+    "Task",
+    "TaskStatus",
 ]

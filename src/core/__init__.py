@@ -9,6 +9,8 @@ from .config import (
     AppConfig,
 )
 
+from .task_queue import TaskQueue
+
 __all__ = [
     "EmbeddingConfig",
     "ChunkConfig",
@@ -16,4 +18,5 @@ __all__ = [
     "CompressionConfig",
     "AttentionConfig",
     "AppConfig",
+    "TaskQueue",
 ]
