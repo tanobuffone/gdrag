@@ -36,6 +36,8 @@ class VectorStoreProtocol(Protocol):
         self,
         chunks: List[Chunk],
         embeddings: Optional[Dict[str, List[float]]] = None,
+        agent_id: Optional[str] = None,
+        visibility: str = "private",
     ) -> List[str]:
         ...
 
@@ -45,10 +47,12 @@ class VectorStoreProtocol(Protocol):
         limit: int = 10,
         domain: Optional[str] = None,
         doc_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_shared: bool = True,
     ) -> List[RankedResult]:
         ...
 
-    def delete_document(self, doc_id: str) -> int:
+    def delete_document(self, doc_id: str, agent_id: Optional[str] = None) -> int:
         ...
 
 
@@ -81,7 +85,12 @@ class GraphStoreProtocol(Protocol):
 class RelationalStoreProtocol(Protocol):
     """Protocol for relational store operations."""
 
-    def store_knowledge_entry(self, item: KnowledgeItem) -> str:
+    def store_knowledge_entry(
+        self,
+        item: KnowledgeItem,
+        agent_id: Optional[str] = None,
+        visibility: str = "private",
+    ) -> str:
         ...
 
     def _execute_query(
@@ -90,6 +99,9 @@ class RelationalStoreProtocol(Protocol):
         params: Optional[tuple] = None,
         fetch: bool = True,
     ) -> List[Dict[str, Any]]:
+        ...
+
+    def set_agent_context(self, agent_id: Optional[str]) -> None:
         ...
 
 
@@ -363,7 +375,11 @@ class KnowledgeManager:
                 chunk.metadata["domain"] = domain
 
         # --- 2. Store embeddings -------------------------------------------
-        self.vector_store.upsert_chunks(chunks)
+        self.vector_store.upsert_chunks(
+            chunks,
+            agent_id=agent_id,
+            visibility=visibility,
+        )
 
         # --- 3. Extract & store concepts in graph --------------------------
         concepts = self.graph_store.extract_concepts(content)
