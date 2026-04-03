@@ -182,22 +182,32 @@ class EnhancedRelationalStore:
         result = self._execute_query(query, params)
         return result[0]["session_id"] if result else session.session_id
 
-    def get_session_memory(self, session_id: str) -> Optional[SessionMemory]:
+    def get_session_memory(self, session_id: str, agent_id: Optional[str] = None) -> Optional[SessionMemory]:
         """Retrieve session memory from PostgreSQL.
 
         Args:
             session_id: Session ID to retrieve.
+            agent_id: Optional agent ID for ownership verification.
 
         Returns:
             Session memory or None if not found.
         """
-        query = """
-        SELECT session_id, agent_id, created_at, last_active,
-               context_summary, token_count, max_tokens, metadata
-        FROM session_memories
-        WHERE session_id = %s
-        """
-        results = self._execute_query(query, (session_id,))
+        if agent_id:
+            query = """
+            SELECT session_id, agent_id, created_at, last_active,
+                   context_summary, token_count, max_tokens, metadata
+            FROM session_memories
+            WHERE session_id = %s AND agent_id = %s
+            """
+            results = self._execute_query(query, (session_id, agent_id))
+        else:
+            query = """
+            SELECT session_id, agent_id, created_at, last_active,
+                   context_summary, token_count, max_tokens, metadata
+            FROM session_memories
+            WHERE session_id = %s
+            """
+            results = self._execute_query(query, (session_id,))
 
         if not results:
             return None
@@ -348,23 +358,83 @@ class EnhancedRelationalStore:
 
         return sessions
 
-    def delete_expired_sessions(self, ttl_hours: int = 24) -> int:
+    def delete_expired_sessions(self, ttl_hours: int = 24, agent_id: Optional[str] = None) -> int:
         """Delete expired sessions.
 
         Args:
             ttl_hours: Session time-to-live in hours.
+            agent_id: Optional agent ID filter.
+
+        Returns:
+            Number of sessions deleted.
+        """
+        if agent_id:
+            query = """
+            DELETE FROM session_memories
+            WHERE last_active < NOW() - INTERVAL '%s hours'
+              AND agent_id = %s
+            RETURNING session_id
+            """
+            results = self._execute_query(query, (ttl_hours, agent_id))
+        else:
+            query = """
+            DELETE FROM session_memories
+            WHERE last_active < NOW() - INTERVAL '%s hours'
+            RETURNING session_id
+            """
+            results = self._execute_query(query, (ttl_hours,))
+        deleted_count = len(results)
+        logger.info(f"Deleted {deleted_count} expired sessions")
+        return deleted_count
+
+    def delete_session(self, session_id: str, agent_id: Optional[str] = None) -> bool:
+        """Delete a session from PostgreSQL.
+
+        Args:
+            session_id: Session ID to delete.
+            agent_id: Optional agent ID for ownership verification.
+
+        Returns:
+            True if deleted, False if not found or not owned by agent.
+        """
+        if agent_id:
+            query = """
+            DELETE FROM session_memories
+            WHERE session_id = %s AND agent_id = %s
+            RETURNING session_id
+            """
+            results = self._execute_query(query, (session_id, agent_id))
+        else:
+            query = """
+            DELETE FROM session_memories
+            WHERE session_id = %s
+            RETURNING session_id
+            """
+            results = self._execute_query(query, (session_id,))
+        deleted = len(results) > 0
+        if deleted:
+            logger.info(f"Deleted session {session_id} from database")
+        else:
+            logger.warning(f"Session {session_id} not found or not owned by agent for deletion")
+        return deleted
+
+    def delete_sessions_by_agent(self, agent_id: str) -> int:
+        """Delete all sessions for an agent.
+
+        Args:
+            agent_id: Agent ID.
 
         Returns:
             Number of sessions deleted.
         """
         query = """
         DELETE FROM session_memories
-        WHERE last_active < NOW() - INTERVAL '%s hours'
+        WHERE agent_id = %s
         RETURNING session_id
         """
-        results = self._execute_query(query, (ttl_hours,))
+        results = self._execute_query(query, (agent_id,))
         deleted_count = len(results)
-        logger.info(f"Deleted {deleted_count} expired sessions")
+        logger.info(f"Deleted {deleted_count} sessions for agent {agent_id}")
         return deleted_count
 
     # ========================================================================

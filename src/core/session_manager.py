@@ -1,6 +1,11 @@
-"""Session memory management for gdrag v2.
+"""Session memory management for gdrag v3.
 
-Provides session creation, persistence, context retrieval, and compression.
+Provides session creation, persistence, context retrieval, and compression
+with multi-tenancy support via agent_id ownership verification.
+
+Compatibility:
+    - API v2: agent_id is optional, no ownership verification
+    - API v3: agent_id required, ownership verified on all operations
 """
 
 import logging
@@ -16,10 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 class SessionManager:
-    """Manages session memory for agents.
+    """Manages session memory for agents with multi-tenancy support.
 
     Handles session lifecycle, query history, context retrieval,
     and automatic compression of old sessions.
+
+    Multi-tenancy (v3):
+        When agent_id is provided to get/delete operations, ownership
+        is verified. Sessions can only be accessed by their owning agent.
+
+    Compatibility (v2):
+        When agent_id is omitted, operations work without ownership
+        checks, maintaining backward compatibility with API v2.
     """
 
     def __init__(
@@ -42,10 +55,10 @@ class SessionManager:
         session_id: Optional[str] = None,
         metadata: Optional[Dict] = None,
     ) -> SessionMemory:
-        """Create a new session.
+        """Create a new session for an agent.
 
         Args:
-            agent_id: Agent identifier.
+            agent_id: Agent identifier (required for multi-tenancy).
             session_id: Optional custom session ID.
             metadata: Optional session metadata.
 
@@ -78,22 +91,33 @@ class SessionManager:
         logger.info(f"Created session {session.session_id} for agent {agent_id}")
         return session
 
-    def get_session(self, session_id: str) -> Optional[SessionMemory]:
-        """Retrieve a session.
+    def get_session(
+        self, session_id: str, agent_id: Optional[str] = None
+    ) -> Optional[SessionMemory]:
+        """Retrieve a session with optional ownership verification.
 
         Args:
             session_id: Session ID to retrieve.
+            agent_id: Optional agent ID for ownership verification.
+                      If provided, only returns session if owned by agent.
 
         Returns:
-            Session memory or None if not found.
+            Session memory or None if not found/not owned.
         """
         # Check in-memory cache first
         if session_id in self._active_sessions:
             session = self._active_sessions[session_id]
 
+            # Verify ownership if agent_id provided (v3 behavior)
+            if agent_id and session.agent_id != agent_id:
+                logger.warning(
+                    f"Session {session_id} not owned by agent {agent_id}"
+                )
+                return None
+
             # Check if expired
             if session.is_expired(self.session_config.session_ttl_hours):
-                self.delete_session(session_id)
+                self.delete_session(session_id, agent_id=agent_id)
                 return None
 
             return session
@@ -102,11 +126,12 @@ class SessionManager:
         store = self._get_store()
         if store:
             try:
-                session = store.get_session_memory(session_id)
+                # Pass agent_id for ownership verification in DB query
+                session = store.get_session_memory(session_id, agent_id=agent_id)
                 if session:
                     # Check if expired
                     if session.is_expired(self.session_config.session_ttl_hours):
-                        self.delete_session(session_id)
+                        self.delete_session(session_id, agent_id=agent_id)
                         return None
 
                     # Cache in memory
@@ -121,19 +146,21 @@ class SessionManager:
         self,
         session_id: str,
         query_record: QueryRecord,
+        agent_id: Optional[str] = None,
     ) -> bool:
         """Add a query record to session history.
 
         Args:
             session_id: Session ID to update.
             query_record: Query record to add.
+            agent_id: Optional agent ID for ownership verification.
 
         Returns:
             True if successful, False otherwise.
         """
-        session = self.get_session(session_id)
+        session = self.get_session(session_id, agent_id=agent_id)
         if session is None:
-            logger.warning(f"Session {session_id} not found")
+            logger.warning(f"Session {session_id} not found or not accessible")
             return False
 
         # Update session
@@ -167,17 +194,19 @@ class SessionManager:
         self,
         session_id: str,
         max_tokens: Optional[int] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """Get relevant context from session history.
 
         Args:
             session_id: Session ID.
             max_tokens: Maximum tokens to include.
+            agent_id: Optional agent ID for ownership verification.
 
         Returns:
             Context string from session history.
         """
-        session = self.get_session(session_id)
+        session = self.get_session(session_id, agent_id=agent_id)
         if session is None:
             return ""
 
@@ -207,16 +236,19 @@ class SessionManager:
 
         return "\n".join(context_parts)
 
-    def compress_session_history(self, session_id: str) -> bool:
+    def compress_session_history(
+        self, session_id: str, agent_id: Optional[str] = None
+    ) -> bool:
         """Compress old session history into a summary.
 
         Args:
             session_id: Session ID to compress.
+            agent_id: Optional agent ID for ownership verification.
 
         Returns:
             True if successful, False otherwise.
         """
-        session = self.get_session(session_id)
+        session = self.get_session(session_id, agent_id=agent_id)
         if session is None:
             return False
 
@@ -260,21 +292,42 @@ class SessionManager:
         logger.info(f"Compressed session {session_id}")
         return True
 
-    def delete_session(self, session_id: str) -> bool:
-        """Delete a session.
+    def delete_session(
+        self, session_id: str, agent_id: Optional[str] = None
+    ) -> bool:
+        """Delete a session with optional ownership verification.
 
         Args:
             session_id: Session ID to delete.
+            agent_id: Optional agent ID for ownership verification.
+                      If provided, only deletes if owned by agent.
 
         Returns:
-            True if successful, False otherwise.
+            True if successful, False if not found/not owned.
         """
-        # Remove from memory
+        # Check ownership in memory cache before deleting
         if session_id in self._active_sessions:
+            session = self._active_sessions[session_id]
+            if agent_id and session.agent_id != agent_id:
+                logger.warning(
+                    f"Cannot delete session {session_id}: not owned by agent {agent_id}"
+                )
+                return False
             del self._active_sessions[session_id]
 
-        # Note: Database deletion would require additional SQL
-        # For now, sessions expire naturally via TTL
+        # Delete from database with ownership check
+        store = self._get_store()
+        if store:
+            try:
+                deleted = store.delete_session(session_id, agent_id=agent_id)
+                if not deleted:
+                    logger.warning(
+                        f"Session {session_id} not found in database for deletion"
+                    )
+                    return False
+            except Exception as e:
+                logger.warning(f"Failed to delete session from database: {e}")
+                return False
 
         logger.info(f"Deleted session {session_id}")
         return True
@@ -284,10 +337,11 @@ class SessionManager:
         agent_id: Optional[str] = None,
         limit: int = 100,
     ) -> List[SessionMemory]:
-        """List sessions.
+        """List sessions, optionally filtered by agent.
 
         Args:
             agent_id: Optional agent ID filter.
+                      For v3 multi-tenancy, this should be provided.
             limit: Maximum sessions to return.
 
         Returns:
@@ -310,10 +364,31 @@ class SessionManager:
             else:
                 self.delete_session(session.session_id)
 
+        # Also query database for sessions not in memory cache
+        store = self._get_store()
+        if store:
+            try:
+                db_sessions = store.list_sessions(agent_id=agent_id, limit=limit)
+                # Merge with in-memory sessions (avoid duplicates)
+                existing_ids = {s.session_id for s in valid_sessions}
+                for db_session in db_sessions:
+                    if db_session.session_id not in existing_ids:
+                        if not db_session.is_expired(self.session_config.session_ttl_hours):
+                            valid_sessions.append(db_session)
+                            # Cache in memory
+                            self._active_sessions[db_session.session_id] = db_session
+            except Exception as e:
+                logger.warning(f"Failed to list sessions from database: {e}")
+
+        # Re-sort after merge and apply limit
+        valid_sessions.sort(key=lambda s: s.last_active, reverse=True)
         return valid_sessions[:limit]
 
-    def cleanup_expired_sessions(self) -> int:
+    def cleanup_expired_sessions(self, agent_id: Optional[str] = None) -> int:
         """Clean up expired sessions.
+
+        Args:
+            agent_id: Optional agent ID filter.
 
         Returns:
             Number of sessions cleaned up.
@@ -321,6 +396,8 @@ class SessionManager:
         expired = []
 
         for session_id, session in self._active_sessions.items():
+            if agent_id and session.agent_id != agent_id:
+                continue
             if session.is_expired(self.session_config.session_ttl_hours):
                 expired.append(session_id)
 
@@ -332,7 +409,8 @@ class SessionManager:
         if store:
             try:
                 db_deleted = store.delete_expired_sessions(
-                    self.session_config.session_ttl_hours
+                    self.session_config.session_ttl_hours,
+                    agent_id=agent_id,
                 )
                 logger.info(f"Cleaned up {db_deleted} expired sessions from database")
             except Exception as e:
@@ -341,20 +419,29 @@ class SessionManager:
         logger.info(f"Cleaned up {len(expired)} expired sessions from memory")
         return len(expired)
 
-    def get_stats(self) -> Dict:
+    def get_stats(self, agent_id: Optional[str] = None) -> Dict:
         """Get session statistics.
+
+        Args:
+            agent_id: Optional agent ID filter for per-agent stats.
 
         Returns:
             Statistics dictionary.
         """
+        sessions = list(self._active_sessions.values())
+
+        if agent_id:
+            sessions = [s for s in sessions if s.agent_id == agent_id]
+
         active = sum(
-            1 for s in self._active_sessions.values()
+            1 for s in sessions
             if not s.is_expired(self.session_config.session_ttl_hours)
         )
 
         return {
-            "total_sessions": len(self._active_sessions),
+            "total_sessions": len(sessions),
             "active_sessions": active,
             "max_tokens_per_session": self.session_config.max_tokens,
             "session_ttl_hours": self.session_config.session_ttl_hours,
+            "agent_id": agent_id,
         }
