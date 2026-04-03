@@ -60,6 +60,11 @@ from .events import (
     StreamName,
 )
 
+from .state import (
+    AgentState,
+    Decision,
+)
+
 __all__ = [
     # Schema models
     "EmbeddingResult",
@@ -109,4 +114,7 @@ __all__ = [
     "Event",
     "EventType",
     "StreamName",
+    # State persistence models
+    "AgentState",
+    "Decision",
 ]
