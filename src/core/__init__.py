@@ -19,6 +19,12 @@ from .knowledge_manager import (
 
 from .task_queue import TaskQueue
 
+from .event_bus import (
+    EventBus,
+    EventHandler,
+    DEFAULT_STREAMS,
+)
+
 __all__ = [
     "EmbeddingConfig",
     "ChunkConfig",
@@ -33,4 +39,8 @@ __all__ = [
     "RelationalStoreProtocol",
     "TenantManagerProtocol",
     "DocumentChunkerProtocol",
+    # EventBus
+    "EventBus",
+    "EventHandler",
+    "DEFAULT_STREAMS",
 ]

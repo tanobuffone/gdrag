@@ -27,28 +27,37 @@ from .tenant import (
 )
 
 from .communication import (
-    # Communication enums
     CommunicationPattern,
     MessageType,
-    # Context models
     ContextRequest,
     ContextResponse,
     SharedContext,
-    # Message models
     CommunicationMessage,
-    # Collaboration models
     CollaborationRequest,
     CollaborationResponse,
 )
 
 from .tasks import (
-    # Task enums
     TaskStatus,
     TaskPriority,
-    # Task models
     Task,
     TaskHandoff,
     TaskEvent,
+)
+
+from .agent import (
+    HealthStatus,
+    AgentEndpoint,
+    AgentRegistration,
+    AgentInfo,
+    AgentHeartbeat,
+    AgentRegistryStats,
+)
+
+from .events import (
+    Event,
+    EventType,
+    StreamName,
 )
 
 __all__ = [
@@ -89,4 +98,15 @@ __all__ = [
     "Task",
     "TaskHandoff",
     "TaskEvent",
+    # Agent registry models
+    "HealthStatus",
+    "AgentEndpoint",
+    "AgentRegistration",
+    "AgentInfo",
+    "AgentHeartbeat",
+    "AgentRegistryStats",
+    # Event models
+    "Event",
+    "EventType",
+    "StreamName",
 ]

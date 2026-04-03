@@ -1,4 +1,4 @@
-# gdrag v2 - Advanced Agent Memory & Context Optimization
+# gdrag v3 - Advanced Agent Memory & Context Optimization
 # Core dependencies
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
@@ -26,8 +26,8 @@ nltk==3.8.1  # Sentence tokenization
 transformers==4.37.2  # For local summarization models
 torch==2.2.0  # Required by transformers
 
-# Caching
-redis==5.0.1  # Optional: for embedding/result caching
+# Caching & Event Bus
+redis[hiredis]==5.0.1  # Redis + hiredis for async streams
 
 # Monitoring
 prometheus-client==0.19.0
