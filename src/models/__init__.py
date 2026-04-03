@@ -1,4 +1,4 @@
-"""gdrag v2 - Data models module."""
+"""gdrag v3 - Data models module."""
 
 from .schemas import (
     EmbeddingResult,
@@ -26,7 +26,33 @@ from .tenant import (
     TenantResponse,
 )
 
+from .communication import (
+    # Communication enums
+    CommunicationPattern,
+    MessageType,
+    # Context models
+    ContextRequest,
+    ContextResponse,
+    SharedContext,
+    # Message models
+    CommunicationMessage,
+    # Collaboration models
+    CollaborationRequest,
+    CollaborationResponse,
+)
+
+from .tasks import (
+    # Task enums
+    TaskStatus,
+    TaskPriority,
+    # Task models
+    Task,
+    TaskHandoff,
+    TaskEvent,
+)
+
 __all__ = [
+    # Schema models
     "EmbeddingResult",
     "Chunk",
     "EnhancedQueryRequest",
@@ -39,6 +65,7 @@ __all__ = [
     "ConceptRelation",
     "CollectionStats",
     "DomainStats",
+    # Tenant models
     "TenantStatus",
     "Tenant",
     "TenantPermissions",
@@ -47,4 +74,19 @@ __all__ = [
     "TenantCreateRequest",
     "TenantUpdateRequest",
     "TenantResponse",
+    # Communication models
+    "CommunicationPattern",
+    "MessageType",
+    "ContextRequest",
+    "ContextResponse",
+    "SharedContext",
+    "CommunicationMessage",
+    "CollaborationRequest",
+    "CollaborationResponse",
+    # Task models
+    "TaskStatus",
+    "TaskPriority",
+    "Task",
+    "TaskHandoff",
+    "TaskEvent",
 ]
